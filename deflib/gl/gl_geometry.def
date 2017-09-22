@@ -1,0 +1,132 @@
+macros:
+    # unit square points
+    P0: -1, -1
+    P1:  1, -1
+    P2:  1,  1
+    P3: -1,  1
+    # unit cube points
+    P000: -1, -1, -1
+    P001: -1, -1, 1
+    P010: -1, 1, -1
+    P011: -1, 1, 1
+    P100: 1, -1, -1
+    P101: 1, -1, 1
+    P110: 1, 1, -1
+    P111: 1, 1, 1
+
+    Quad: $1, $2, $3, $1, $3, $4
+
+    # basic color
+    black: 0,0,0
+    white: 1,1,1
+    red: 1,0,0
+    green: 0,1,0
+    blue: 0,0,1
+    yellow: 1,1,0
+    purple: 1,0,1
+    cyan: 0,1,1
+
+    gray: $1,$1,$1
+
+    normal_f: 0,0,-1
+    normal_b: 0,0,1
+    normal_u: 0,1,0
+    normal_d: 0,-1,0
+    normal_l: -1,0,0
+    normal_r: 1,0,0
+
+# ref: https://www.khronos.org/opengl/wiki/Vertex_Specification
+subcode: static_vertex_array
+    $(block:_setup)
+        $local GLuint vertex_array
+        glGenVertexArrays(1, &vertex_array)
+        glBindVertexArray(vertex_array)
+
+    BLOCK
+    $(for:v in $(attrib_list))
+        $local static const GLfloat $(v)_data[]={$($(v))}
+        $(block:_setup)
+            $local GLuint $(v)_buffer
+            glGenBuffers(1, &$(v)_buffer)
+            glBindBuffer(GL_ARRAY_BUFFER, $(v)_buffer)
+            glBufferData(GL_ARRAY_BUFFER, sizeof($(v)_data), $(v)_data, GL_STATIC_DRAW)
+        $(block:_cleanup)
+            glDeleteBuffers(1, &$(v)_buffer)
+
+    $local static const GLubyte index_data[]={$(element)}
+    $(block:_setup)
+        $local GLuint element_buffer
+        glGenBuffers(1, &element_buffer)
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, element_buffer)
+        glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(index_data), index_data, GL_STATIC_DRAW)
+
+    $(block:_cleanup)
+        glDeleteBuffers(1, &element_buffer)
+        glDeleteVertexArrays(1, &vertex_array)
+
+    $(block:_draw)
+        $local GLint loc
+        $(for:v in $(attrib_list))
+            loc = glGetAttribLocation(program_0, "$(v)")
+            $if loc>=0
+                glEnableVertexAttribArray($(_i))
+                glBindBuffer(GL_ARRAY_BUFFER, $(v)_buffer)
+                # need set size
+                glVertexAttribPointer(loc,3,GL_FLOAT,GL_FALSE,0,0)
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, element_buffer)
+        $(set:count=sizeof(index_data)/sizeof(index_data[0]))
+        glDrawElements(GL_TRIANGLES, $(count), GL_UNSIGNED_BYTE, 0)
+        $(for:v in $(attrib_list))
+            glDisableVertexAttribArray($(_i))
+
+#---------------------------------------- 
+subcode: demo_triangle
+    $(setmacro:attrib_list=pos)
+    &call static_vertex_array
+        $(set:pos) join, ','
+            $(P0), 0
+            $(P1), 0
+            0, 1, 0
+        $(set:element) join, ','
+            0, 1, 2
+        $(mexport:pos, element)
+
+subcode: demo_square
+    $(setmacro:attrib_list=pos)
+    &call static_vertex_array
+        $(set:pos) join, ','
+            $(P0), 0
+            $(P1), 0
+            $(P2), 0
+            $(P3), 0
+        $(set:element) join, ','
+            0, 1, 2
+            0, 2, 3
+        $(mexport:pos, element)
+
+subcode: demo_cube
+    $(setmacro:attrib_list=pos,color)
+    &call static_vertex_array
+        $(set:pos) join, ','
+            $(P000), $(P010), $(P110), $(P100)
+            $(P001), $(P011), $(P111), $(P101)
+            $(P000), $(P001), $(P101), $(P100)
+            $(P010), $(P011), $(P111), $(P110)
+            $(P000), $(P001), $(P011), $(P010)
+            $(P100), $(P101), $(P111), $(P110)
+        $(set:color) join, ','
+            $(red:x4,)
+            $(green:x4,)
+            $(blue:x4,)
+            $(cyan:x4,)
+            $(yellow:x4,)
+            $(purple:x4,)
+        $(set:element) join, ','
+            $(Quad:0,1,2,3)
+            $(Quad:4,5,6,7)
+            $(Quad:8,9,10,11)
+            $(Quad:12,13,14,15)
+            $(Quad:16,17,18,19)
+            $(Quad:20,21,22,23)
+        $(mexport:pos,color,element)
+

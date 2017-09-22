@@ -1,0 +1,13 @@
+macros:
+    degree: $1 * 3.1415926/180.0
+
+subcode: rotation_matrix(m, theta)
+    $(set:C=cos($(theta)))
+    $(set:S=sin($(theta)))
+    $local mat2 $(m) = mat2($(C),$(S),-$(S),$(C))
+
+subcode: rotate(v, theta)
+    $(set:C=cos($(theta)))
+    $(set:S=sin($(theta)))
+    $(v) = $(v) * mat2($(C),$(S),-$(S),$(C))
+

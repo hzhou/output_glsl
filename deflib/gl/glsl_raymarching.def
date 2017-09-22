@@ -1,0 +1,151 @@
+include: macros/glsl_util.def
+
+subcode: shader_main
+    $local vec2 WH = vec2(n_width, n_height)
+    $call ray_marching_init, gl_FragCoord.xy, WH
+    $call ray_marching
+    color = rgb
+
+subcode: ray_marching_init(XY, WH)
+    $local vec2 xy  = $(XY)
+    $local vec3 rgb = vec3(0.0, 0.0, 0.4)
+    xy -= $(WH)/2.0
+    xy /= $(WH).y/2.0
+
+#---------------------------------------- 
+subcode: setup_ray(z)
+    # camera at (0, 0, z)
+    # rd: ray direction, from (0, 0, z) to (x, y, 0)
+    $local ro, rd
+    ro = vec3(0.0, 0, $(z))
+    rd = normalize(vec3(xy, -$(z)))
+
+    $(if:1)
+        # not exactly the spherical coor
+        $my f_theta = $(degree:60.0)
+        $my f_phi   = f_time/10.0
+        $call rotate, rd.yz, f_theta
+        $call rotate, rd.xz, f_phi
+        # ro: ray origin, assume 2 distance behind
+        $call rotate, ro.yz, f_theta
+        $call rotate, ro.xz, f_phi
+
+    $local v3_light
+    v3_light = vec3(1.0, 0.8, 0.6)
+
+#---------------------------------------- 
+subcode: _autoload
+    $register_name(ro) vec3
+    $register_name(rd) vec3
+
+subcode: amb_dif_sha_tex
+    v3_tex = f_get_texture($(norm))
+    v3_lig = normalize(v3_light - $(pos))
+    f_dif = max(0.0, dot($(norm), v3_light))
+    f_ind = max(0.0, dot($(norm), -v3_light))
+    f_amb = 0.5 + 0.5 * $(norm).y
+    f_sha = 0.2 + 0.8 * f_shadow($(pos), v3_light)
+
+    rgb  = f_amb * vec3(0.2) 
+    rgb += f_dif * vec3(1.0) * f_sha + f_ind
+    rgb  = pow(rgb, vec3(0.4545))
+    rgb *= v3_tex
+
+#---- boiler-plate ----------------------
+subcode: hit
+    $my v3_pos, v3_norm
+    tf_l = f_hit(ro, rd)
+    $if tf_l>0.0
+        v3_pos = ro + tf_l * rd
+        v3_norm = f_get_normal(v3_pos)
+        $(set:pos=v3_pos)
+        $(set:norm=v3_norm)
+        BLOCK
+
+#---------------------------------------- 
+fncode: f_hit(in vec3 ro, in vec3 rd)
+    $return_type float
+    &call2 to_hit, 0.0, 0.0001
+        return $(l)
+    step:
+        $(if:!exactness)
+            $(set:exactness=0.7)
+        $(l)+=$(exactness)*$(dist)
+    return 0.0
+
+fncode: f_shadow(in vec3 ro, in vec3 rd)
+    $return_type float
+    $local f_sha = 1.0
+    &call2 to_hit, 0.01, 0.001
+        # blocked, in direct shadow
+        return 0.0
+    step:
+        f_sha = min( f_sha, 4.0*$(dist)/$(l) );
+        $(l)+=$(dist)
+    return f_sha
+
+subcode: to_hit(start, thresh)
+    # input: ro, rd
+    f_length = $(start)
+    $(set:l=f_length)
+    $for i=0:1000
+        $(set:dist=tf_dist)
+        $(dist) = f_map(ro+$(l)*rd)
+        $if $(dist)<$(thresh)
+            BLOCK1
+        $else
+            BLOCK2
+        $if $(l)>6.0
+            break
+
+#---------------------------------------- 
+fncode: f_get_normal(in vec3 p)
+    $return_type vec3
+    $local vec3 e, vec3 n
+    e = vec3(0.0001,0.0,0.0)
+    # distance is a vector projected to normal, i.e. dot product
+    n.x = f_map(p+e.xyy) - f_map(p-e.xyy)
+    n.y = f_map(p+e.yxy) - f_map(p-e.yxy)
+    n.z = f_map(p+e.yyx) - f_map(p-e.yyx)
+    return normalize(n)
+    
+#---- map -------------------------- 
+subcode: map_sphere(r)
+    $(export:d=length(v3_p)-$(r))
+
+subcode: map_cube(a)
+    $my vec3 d = abs(v3_p)-vec3($(a))
+    $(set:outside=length(max(d, 0.0)))
+    $(set:inside= min(max(d.x, max(d.y, d.z)), 0.0))
+    $(export:d=$(outside)+$(inside))
+
+subcode: map_torus(r1, r2)
+    # r1: big radius, r2: small radius, in xy plane
+    $(set:q=length(v3_p.xy)-$(r1))
+    $(export:d=length(vec2($(q), v3_p.z) - $(r2))
+
+subcode: map_cylinder(a, b, r)
+    # ? length(p.xz-c.xy)-c.z
+
+subcode: map_cone(r, z)
+    # bottom in xy plane, (z, r) is its normal, assume normalized
+    $(set:q=length(v3_p.xy))
+    $(export:d=dot(vec2(z, r),vec2(q, v3_p.z)))
+
+subcode: map_plane(norm)
+    # ? dot(p,n.xyz) + n.w
+    $(set:d=dot(v3_p, $(norm)))
+
+# union         min(d1, d2)
+# subtraction   max(d1, -d2)
+# intersection  max(d1, d2)
+
+# repetition     q = mod(p, c) - 0.5*c
+# rotation/traslation  q = invert(m)*p
+# scale    map(p/s)*s
+
+# displacement  d1 = map(); d2 = disp(); return d1+d2
+# blend         return smin(d1, d2)
+
+# twist         q= rotate(p, p.z*alpha)
+
