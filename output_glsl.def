@@ -1,0 +1,110 @@
+include: output.def
+
+page: output_glsl, inherit, c
+    type: pm
+    output_dir: lib/MyDef
+    ext: glsl
+    init_mode: sub
+    package: MyDef::output_glsl
+
+subcode: on_init
+    $call register_types
+    $global $shader_type
+    $shader_type = $MyDef::page->{type}
+
+    # ref: later opengl version prefers in/out vs. attribute/varying
+    $(for:attrib, uniform, varying)
+        my $$1_list = MyDef::compileutil::get_macro_word("$1_list", 1)
+    $if $shader_type eq "vsl"
+        $if !$attrib_list
+            $call global_add, "pos", in
+        $else
+            $foreach $v in split /,\s*/, $attrib_list
+                $call global_add, $v, in
+    $elif $shader_type eq "fsl"
+        $call global_add, "color", out
+
+    $if $uniform_list
+        $foreach $v in split /,\s*/, $uniform_list
+            $call global_add, $v, uniform
+
+    $if $varying_list
+        $foreach $v in split /,\s*/, $varying_list
+            $if $shader_type eq "vsl"
+                $call global_add, $v, out
+            $else
+                $call global_add, $v, in
+
+    subcode: register_types
+        $MyDef::output_c::type_prefix{v}="vec4"
+        $MyDef::output_c::type_prefix{v2}="vec2"
+        $MyDef::output_c::type_prefix{v3}="vec3"
+        $MyDef::output_c::type_prefix{v4}="vec4"
+        $MyDef::output_c::type_prefix{iv2}="ivec2"
+        $MyDef::output_c::type_prefix{iv3}="ivec3"
+        $MyDef::output_c::type_prefix{iv4}="ivec4"
+        $MyDef::output_c::type_prefix{bv2}="bvec2"
+        $MyDef::output_c::type_prefix{bv3}="bvec3"
+        $MyDef::output_c::type_prefix{bv4}="bvec4"
+        $MyDef::output_c::type_prefix{m}="mat4"
+        $MyDef::output_c::type_prefix{m2}="mat2"
+        $MyDef::output_c::type_prefix{m3}="mat3"
+        $MyDef::output_c::type_prefix{m4}="mat4"
+        $MyDef::output_c::type_prefix{s1}="sampler1D"
+        $MyDef::output_c::type_prefix{s2}="sampler2D"
+        $MyDef::output_c::type_prefix{s3}="sampler3D"
+        $MyDef::output_c::type_prefix{sc}="samplerCube"
+        $MyDef::output_c::type_prefix{s1w}="sampler1Dshadow"
+        $MyDef::output_c::type_prefix{s2w}="sampler2Dshadow"
+        $MyDef::output_c::type_name{gl_FrontColor}="vec4"
+        $MyDef::output_c::type_name{gl_BackColor}="vec4"
+        $MyDef::output_c::type_name{gl_TexCoord}="vec4 *"
+        $MyDef::output_c::type_name{gl_Position}="vec4"
+        $MyDef::output_c::type_name{gl_FragColor}="vec4"
+        $MyDef::output_c::type_name{gl_FragDepth}="float"
+        $MyDef::output_c::type_name{pos}="vec3"
+        $MyDef::output_c::type_name{norm}="vec3"
+        $MyDef::output_c::type_name{uv}="vec3"
+        $MyDef::output_c::type_name{color}="vec3"
+        # shadertoy
+        $MyDef::output_c::type_name{iResolution}="vec2"
+
+    subcode: global_add(v, attr)
+        my $name = $(super:global_add_var)($(v))
+        my $var = $(super:find_var)($name)
+        $var->{attr} = "$(attr)"
+
+subcode: on_dumpout
+    # ----  Main Function -------------------
+    my $func=$MyDef::output_c::functions{"main"};
+    $if $func
+        $func->{skip_declare}=1;
+        $func->{ret_type}="void";
+        $func->{param_list}=["void"];
+        $func->{init}=["DUMP_STUB main_init"];
+        $func->{finish}=["DUMP_STUB main_exit"];
+
+        $(super:process_function_std)($func)
+        $func->{processed}=1
+
+    push @$f, "#version 330 core\n\n"
+    $$(super:has_main)=1
+    @$(super:include_list)=()
+    @$(super:object_list)=()
+    %$(super:objects)=()
+
+subcode: on_parsecode
+    $if $l=~/^\x24(attribute|uniform|varying|in|out)\s*(.*)/
+        my $attr=$1;
+        my @vlist=split /,\s+/, $2
+        $foreach $v in @vlist
+            $call global_add, $v
+        return
+
+    subcode: global_add(t)
+        my $name = $(super:global_add_var)($(t))
+        $if $attr
+            my $var = $(super:find_var)($name)
+            $var->{attr} = "$attr ".$var->{attr}
+
+
