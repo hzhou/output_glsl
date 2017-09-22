@@ -1,0 +1,45 @@
+#---- Typical OpenGL Test -------------
+
+include: macros/gl.def
+include: macros/glsl_util.def
+
+macros:
+    uniform_list: n_width, n_height, f_time
+    # attrib_list: pos, color
+    attrib_list: color, pos
+    varying_list: v3_fragcolor
+
+page: cube, gl_frame
+    make: win32
+    module: c
+    shader: cube
+
+    #$call demo_triangle
+    $call demo_cube
+
+page: cube, vertex_shader
+    module: glsl
+    type: vsl
+
+    f_aspect = 1.0 * n_width / n_height
+    v3_p = pos
+    $call setup_model, v3_p
+    v3_fragcolor = color
+    gl_Position.xyz = v3_p
+    gl_Position.w = 1.0
+
+    subcode: setup_model(p)
+        f_theta = $(degree:60.0)
+        f_phi   = f_time/10.0
+        $call rotate, $(p).yz, f_theta
+        $call rotate, $(p).xz, f_phi
+        $(p).x/=f_aspect
+        $(p)/=4.0
+        # $(p).z -=10
+
+page: cube, fragment_shader
+    module: glsl
+    type: fsl
+
+    color = v3_fragcolor
+
