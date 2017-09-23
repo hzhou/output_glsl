@@ -1,0 +1,32 @@
+subcode: init_systime
+    $global double f_start_time, double f_time
+    f_start_time = glfwGetTime()
+    f_time = f_start_time
+
+subcode: check_fps
+    $global n_frame_count = 0
+    n_frame_count ++
+
+    $(if:!fps)
+        f_time= glfwGetTime()
+    $(else)
+        $my double tf_time
+        tf_time = glfwGetTime()
+
+        $if abs(tf_time-f_time)< 1.0/$(fps)
+            f_time += 1.0/$(fps)
+            $call sleep, (f_time-tf_time)
+        $else
+            f_time = tf_time
+
+    $(set:dt=(f_time-f_start_time))
+    $if $(dt)>1.0
+        tf_fps = n_frame_count/$(dt)
+        printf("\x1b[1Gfps = %.3f", tf_fps)
+        fflush(stdout)
+        f_start_time=f_time
+        n_frame_count=0
+
+#----------------------------------------------- 
+subcode: set_uniform_f_time
+    glUniform1f(loc, f_time)

@@ -1,0 +1,40 @@
+subcode:: gl_require
+    $include GL/glew.h
+    $include GLFW/glfw3.h
+
+subcode: glfw_init
+    $if !glfwInit()
+        $call die, "Failed glfwInit\n"
+
+    glfwWindowHint(GLFW_SAMPLES, 4)
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3)
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3)
+    glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE)
+    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE)
+
+    $global GLFWwindow * win
+
+    $call @init_default
+    win = glfwCreateWindow($(window_size), "$(window_title)", NULL, NULL)
+    $if !win
+        $print "Failed glfwCreateWindow"
+        goto Finish
+    glfwMakeContextCurrent(win)
+
+    $local n_width, n_height
+    glfwGetFramebufferSize(win, &n_width, &n_height)
+
+    glewExperimental = 1;
+    $if glewInit()!=GLEW_OK
+        $print "Failed glewInit"
+        goto Finish
+
+    glfwSetInputMode(win, GLFW_STICKY_KEYS, GL_TRUE)
+
+
+subcode: init_default
+    $(if:!window_size)
+        $(setmacro:window_size=800,600)
+    $(if:!window_title)
+        $(setmacro:window_title=test)
+

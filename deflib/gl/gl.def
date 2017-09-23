@@ -1,67 +1,28 @@
-include: macros/gl_geometry.def
+include: gl/glfw.def
+include: gl/gl_timing.def
+include: gl/gl_geometry.def
 subcode: gl_frame
     $include stdio
     $include stdlib
     $call gl_require
     $list gl_main
 
-    subcode: gl_require
-        # at run-time determine supported OpenGL Extensions
-        $include GL/glew.h
-        # creating windows, contexts, surfaces, input, events
-        $include GLFW/glfw3.h
-        $uselib glew32, glfw3
-
-        $include windows.h
-        $uselib gdi32, opengl32
-
+#----------------------------------------------- 
 fncode: gl_main(main)
-    $if !glfwInit()
-        $call die, "Failed glfwInit\n"
+    $call glfw_init
 
-    glfwWindowHint(GLFW_SAMPLES, 4)
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3)
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3)
-    glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE)
-    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE)
-
-    $global GLFWwindow * win
-
-    n_width = 1024
-    n_height = 768
-    win = glfwCreateWindow(n_width, n_height, "test", NULL, NULL)
-    $if !win
-        $print "Failed glfwCreateWindow"
-        goto Finish
-    glfwMakeContextCurrent(win)
-
-    glewExperimental = 1;
-    $if glewInit()!=GLEW_OK
-        $print "Failed glewInit"
-        goto Finish
-
-    glfwSetInputMode(win, GLFW_STICKY_KEYS, GL_TRUE)
     glEnable(GL_DEPTH_TEST)
     glDepthFunc(GL_LESS)
     glClearColor(0, 0, 0.4, 0.0)
 
-    $local GLuint program_0
-    program_0 = load_shaders("$(shader).vsl", "$(shader).fsl")
-    $(block:_cleanup)
-        glDeleteProgram(program_0)
-
+    $call @load_program, program_0
     DUMP_STUB _setup
     $call @init_systime
     $while 1
         glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT)
         glUseProgram(program_0)
-        $(if:uniform_list)
-            $local GLint loc
-            $(for:v in $(uniform_list))
-                loc = glGetUniformLocation(program_0, "$(v)")
-                $if loc!=-1
-                    $call set_uniform_$(v)
-        $call main2
+        $call @set_uniform_list
+        $Call main2
         DUMP_STUB _draw
 
         glfwSwapBuffers(win)
@@ -80,52 +41,22 @@ fncode: gl_main(main)
 
     return 0
 
-    # ---------------------------------
-    # ---------------------
-    subcode: init_systime
-        $global n_systime=0
-        $global n_start_time = 0
-        $call winapi_gettime
-        n_start_time=tn_systime
-        n_systime = n_start_time
+#----- shader programs ------
+subcode: load_program(v_prog)
+    $local GLuint $(v_prog)
+    $(if:shader_string)
+        $global s_vsrc=[file:$(shader).vsl]
+        $global s_fsrc=[file:$(shader).fsl]
+    $(else)
+        s_vsrc = get_file_s("$(shader).vsl", NULL)
+        s_fsrc = get_file_s("$(shader).fsl", NULL)
+    $(v_prog) = load_shaders(s_vsrc, s_fsrc)
+    $(block:_cleanup)
+        glDeleteProgram($(v_prog))
 
-    subcode: check_fps
-        $global n_systime=0
-        $global n_start_time = 0
-        $global n_frame_count = 0
-        $call winapi_gettime
-        n_frame_count ++
-        $(if:!fps)
-            n_systime=tn_systime
-        $(else)
-            $if abs(tn_systime-n_systime)< 1000/$(fps)
-                n_systime += 1000/$(fps)
-                tn_sleep = n_systime-tn_systime
-                # $print sleep $tn_sleep ...
-                Sleep(n_systime - tn_systime)
-            $else
-                n_systime=tn_systime
-        $(set:dt=(n_systime-n_start_time))
-        $if $(dt)>1000
-            tf_fps = 1000.0*n_frame_count/$(dt)
-            printf("\x1b[1Gfps = %.3f", tf_fps)
-            fflush(stdout)
-            n_start_time=n_systime
-            n_frame_count=0
-
-    subcode: winapi_gettime
-        $my SYSTEMTIME sys_time
-        GetSystemTime(&sys_time)
-        $(set:s=sys_time.wSecond)
-        $(set:m=sys_time.wMinute)
-        $(set:h=sys_time.wHour)
-        $(set:d=sys_time.wDay)
-        $(set:ms=sys_time.wMilliseconds)
-        tn_systime = ($(h)*3600 + $(m)*60 + $(s))*1000 + $(ms)
-
-fncode: load_shaders(s_v_file, s_f_file)
-    $call load_shader, VERTEX, s_v_file
-    $call load_shader, FRAGMENT, s_f_file
+fncode: load_shaders(s_vsrc, s_fsrc)
+    $call load_shader, VERTEX, s_vsrc
+    $call load_shader, FRAGMENT, s_fsrc
     $local GLuint program
     program = glCreateProgram()
     glAttachShader(program, shader_VERTEX)
@@ -138,20 +69,19 @@ fncode: load_shaders(s_v_file, s_f_file)
         glDeleteShader(shader_$1)
     return program
 
-    subcode: load_shader(type, file)
+    subcode: load_shader(type, src)
         # type: VERTEX or FRAGMENT
         $(set:V=shader_$(type))
-        $(set:src=ts_$(type)_source)
-        $local GLuint $(V), char const * $(src)
+        $local GLuint $(V)
         $(V) = glCreateShader(GL_$(type)_SHADER)
-        $(src) = get_file_s($(file), NULL)
         $if $(src)
-            glShaderSource($(V), 1, &$(src), NULL)
+            $(set:C=const char *const *)
+            glShaderSource($(V), 1, ($(C))&$(src), NULL)
             $print Compiling shader_$(type) ...
             glCompileShader($(V))
             $call showinfo, $(V), Shader, GL_COMPILE_STATUS
         $else
-            $print "Failed load $(file)"
+            $print "Null $(src)"
             return 0
 
     subcode: showinfo(V, type, status)
@@ -164,11 +94,17 @@ fncode: load_shaders(s_v_file, s_f_file)
             puts(ts_info)
 
 #---------------------------------------- 
+subcode: set_uniform_list
+    $(if:uniform_list)
+        $local GLint loc
+        $(for:v in $(uniform_list))
+            loc = glGetUniformLocation(program_0, "$(v)")
+            $if loc!=-1
+                $call set_uniform_$(v)
+
 subcode: set_uniform_n_width
     glUniform1i(loc, n_width)
 
 subcode: set_uniform_n_height
     glUniform1i(loc, n_height)
 
-subcode: set_uniform_f_time
-    glUniform1f(loc, n_systime/1000.0)

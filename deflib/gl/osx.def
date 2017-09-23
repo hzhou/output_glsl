@@ -1,0 +1,12 @@
+subcode:: gl_require
+    $uselib glew
+    $uselib glfw
+    $uselib -framework OpenGl
+
+subcode: sleep(seconds)
+    $include time.h
+    # usleep((int)(1000000.0*$(seconds)))
+    $my struct timespec t_sleep
+    t_sleep.tv_sec = (int)$(seconds)
+    t_sleep.tv_nsec = (long)(($(seconds)-t_sleep.tv_sec)*1e9)
+    nanosleep(&t_sleep, NULL)

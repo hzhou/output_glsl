@@ -1,0 +1,10 @@
+subcode:: gl_require
+    # $include windows.h
+    $uselib gdi32, opengl32
+
+    $uselib glew32
+    $uselib glfw3
+
+subcode: sleep(seconds)
+    Sleep((int)(1000.0*$(seconds)))
+

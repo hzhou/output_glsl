@@ -1,7 +1,9 @@
 #---- Typical OpenGL Test -------------
+prerun: mydef_page -mglsl -oout cube.def
 
-include: macros/gl.def
-include: macros/glsl_util.def
+include: gl/osx.def
+include: gl/gl.def
+include: gl/glsl_util.def
 
 macros:
     uniform_list: n_width, n_height, f_time
@@ -10,13 +12,16 @@ macros:
     varying_list: v3_fragcolor
 
 page: cube, gl_frame
-    make: win32
     module: c
-    shader: cube
+    shader: out/cube
+    shader_string: 1
+    window_size: 800, 600
+    fps: 30
 
     #$call demo_triangle
     $call demo_cube
 
+#----------------------------------------------- 
 page: cube, vertex_shader
     module: glsl
     type: vsl
@@ -29,13 +34,13 @@ page: cube, vertex_shader
     gl_Position.w = 1.0
 
     subcode: setup_model(p)
-        f_theta = $(degree:60.0)
-        f_phi   = f_time/10.0
+        # f_theta = $(degree:60.0)
+        f_theta = f_time/50.0
+        f_phi   = f_time/2.0
         $call rotate, $(p).yz, f_theta
         $call rotate, $(p).xz, f_phi
         $(p).x/=f_aspect
         $(p)/=4.0
-        # $(p).z -=10
 
 page: cube, fragment_shader
     module: glsl
