@@ -1,0 +1,37 @@
+include: gl/gl.def
+include: gl/gl_const.def
+
+subcode: particles(N, n)
+    $call vertex_array
+    $(set:pos=$(P0),0,$(P1),0,$(P3),0,$(P2),0)
+    $call set_buffer, pos, static
+    $(for:v in $(attrib_list))
+        $(if:_i>0)
+            $call set_buffer, $(v), $(N)*3
+
+    BLOCK
+
+    &call draw
+        $(for:v in $(attrib_list))
+            $(if:_i>0)
+                $call stream_data, $(v)
+
+        $call bind_attrib_list
+        $call set_uniform_list
+
+        glVertexAttribDivisor(0,0)
+        $(for:v in $(attrib_list))
+            $(if:_i>0)
+                glVertexAttribDivisor($(_i),1)
+        glDrawArraysInstanced(GL_TRIANGLE_STRIP,0,4,$(n))
+
+        $call disable_attrib_list
+
+    subcode: stream_data(v)
+        $(set:size=$(N)*3*sizeof(GLfloat))
+        glBindBuffer(GL_ARRAY_BUFFER, $(v)_buffer)
+        # buffer orphaning
+        glBufferData(GL_ARRAY_BUFFER, $(size), NULL, GL_STREAM_DRAW)
+        $global GLfloat $(v)_data[$(N)*3]
+        $(set:size=$(n)*3*sizeof(GLfloat))
+        glBufferSubData(GL_ARRAY_BUFFER, 0, $(size), $(v)_data)
