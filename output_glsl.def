@@ -50,12 +50,14 @@ subcode: on_init
         $MyDef::output_c::type_prefix{m2}="mat2"
         $MyDef::output_c::type_prefix{m3}="mat3"
         $MyDef::output_c::type_prefix{m4}="mat4"
-        $MyDef::output_c::type_prefix{s1}="sampler1D"
-        $MyDef::output_c::type_prefix{s2}="sampler2D"
-        $MyDef::output_c::type_prefix{s3}="sampler3D"
-        $MyDef::output_c::type_prefix{sc}="samplerCube"
-        $MyDef::output_c::type_prefix{s1w}="sampler1Dshadow"
-        $MyDef::output_c::type_prefix{s2w}="sampler2Dshadow"
+        # $MyDef::output_c::type_prefix{s1}="sampler1D"
+        # $MyDef::output_c::type_prefix{s2}="sampler2D"
+        # $MyDef::output_c::type_prefix{s3}="sampler3D"
+        # $MyDef::output_c::type_prefix{sc}="samplerCube"
+        # $MyDef::output_c::type_prefix{s1w}="sampler1Dshadow"
+        # $MyDef::output_c::type_prefix{s2w}="sampler2Dshadow"
+        $MyDef::output_c::type_prefix{tex}="sampler2D"
+
         $MyDef::output_c::type_name{gl_FrontColor}="vec4"
         $MyDef::output_c::type_name{gl_BackColor}="vec4"
         $MyDef::output_c::type_name{gl_TexCoord}="vec4 *"
@@ -64,10 +66,13 @@ subcode: on_init
         $MyDef::output_c::type_name{gl_FragDepth}="float"
         $MyDef::output_c::type_name{pos}="vec3"
         $MyDef::output_c::type_name{norm}="vec3"
-        $MyDef::output_c::type_name{uv}="vec3"
+        $MyDef::output_c::type_name{uv}="vec2"
         $MyDef::output_c::type_name{color}="vec3"
-        # shadertoy
-        $MyDef::output_c::type_name{iResolution}="vec2"
+
+        # type_quad: v3 -- ref: test/particles.def
+        $foreach %{$MyDef::def->{macros}}
+            $if $k=~/type_(\w+)/
+                $MyDef::output_c::type_name{$1}=$v
 
     subcode: global_add(v, attr)
         my $name = $(super:global_add_var)($(v))

@@ -1,6 +1,5 @@
 include: gl/glfw.def
 include: gl/gl_timing.def
-include: gl/gl_geometry.def
 subcode: gl_frame
     $include stdio
     $include stdlib
@@ -15,15 +14,14 @@ fncode: gl_main(main)
     glDepthFunc(GL_LESS)
     glClearColor(0, 0, 0.4, 0.0)
 
-    $call @load_program, program_0
+    $call @load_program, 0, $(shader)
     DUMP_STUB _setup
     $call @init_systime
     $while 1
         glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT)
-        glUseProgram(program_0)
-        $call @set_uniform_list
+        $call use_prog, 0
+
         $Call main2
-        DUMP_STUB _draw
 
         glfwSwapBuffers(win)
         $call check_fps
@@ -41,18 +39,118 @@ fncode: gl_main(main)
 
     return 0
 
-#----- shader programs ------
-subcode: load_program(v_prog)
-    $local GLuint $(v_prog)
-    $(if:shader_string)
-        $global s_vsrc=[file:$(shader).vsl]
-        $global s_fsrc=[file:$(shader).fsl]
+    subcode: vertex_array
+        $(block:_setup)
+            $local GLuint vertex_array
+            glGenVertexArrays(1, &vertex_array)
+            glBindVertexArray(vertex_array)
+        $(block:_cleanup)
+            glDeleteVertexArrays(1, &vertex_array)
+
+    subcode: use_prog(id)
+        glUseProgram(prog_$(id))
+        $(setmacro:prog=prog_$(id))
+
+#----- Uniforms ----------------------------------- 
+subcode: set_uniform(v)
+    loc = glGetUniformLocation($(prog), "$(v)")
+    $(if:v~tex)
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, $(v));
+        glUniform1i(loc, 0);
     $(else)
-        s_vsrc = get_file_s("$(shader).vsl", NULL)
-        s_fsrc = get_file_s("$(shader).fsl", NULL)
-    $(v_prog) = load_shaders(s_vsrc, s_fsrc)
+        $(if:v~f_)
+            $(set:t=1f)
+        $(elif:v~[ni]_)
+            $(set:t=1i)
+        glUniform$(t)(loc, $(v))
+
+#---- Attributes ------------------------- 
+subcode: set_buffer(v, type_or_size)
+    $(if:v=element)
+        $(set:T=GLubyte)
+        $(set:TT=GL_ELEMENT_ARRAY_BUFFER)
+    $(else)
+        $(set:T=GLfloat)
+        $(set:TT=GL_ARRAY_BUFFER)
+
+    $(if:type_or_size=static)
+        $(if:$(v))
+            $local static const $(T) $(v)_data[]={$($(v))}
+        $(set:size=sizeof($(v)_data))
+        $(set:data=$(v)_data)
+        $(set:draw=GL_STATIC_DRAW)
+    $(else)
+        $(set:size=$(type_or_size)*sizeof(GLfloat))
+        $(set:data=NULL)
+        $(set:draw=GL_STREAM_DRAW)
+
+    # -----------------------------
+    $(block:_setup)
+        $local GLuint $(v)_buffer
+        glGenBuffers(1, &$(v)_buffer)
+        glBindBuffer($(TT), $(v)_buffer)
+        glBufferData($(TT), $(size), $(data), $(draw))
     $(block:_cleanup)
-        glDeleteProgram($(v_prog))
+        glDeleteBuffers(1, &$(v)_buffer)
+
+#---- Draw --------------------
+subcode: draw
+    BLOCK
+
+    # ------------------------
+    subcode: set_uniform_list
+        $(if:uniform_list)
+            $local GLint loc
+            $(for:v in $(uniform_list))
+                $call set_uniform, $(v)
+
+    # -------------------
+    subcode: bind_attrib_list
+        # lets always use float vec3 -- cope with it!
+        $local GLint loc
+        $(for:v in $(attrib_list))
+            loc = glGetAttribLocation($(prog), "$(v)")
+            glEnableVertexAttribArray($(_i))
+            glBindBuffer(GL_ARRAY_BUFFER, $(v)_buffer)
+            $(if:v~uv)
+                glVertexAttribPointer(loc,2,GL_FLOAT,GL_FALSE,0,0)
+            $(else)
+                glVertexAttribPointer(loc,3,GL_FLOAT,GL_FALSE,0,0)
+
+    subcode: disable_attrib_list
+        $(for:v in $(attrib_list))
+            glDisableVertexAttribArray($(_i))
+
+    # -------------------
+    subcode: draw_elements
+        $(set:count=sizeof(element_data)/sizeof(element_data[0]))
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, element_buffer)
+        glDrawElements(GL_TRIANGLES, $(count), GL_UNSIGNED_BYTE, 0)
+
+#---- Document ----------------------------------- 
+# glDrawArrays: 
+#     count sequential elements from each enabled array
+
+# glDrawElements: 
+#     count sequential elements from an enabled array
+
+
+
+#----- shader programs ------
+# $call load_program, 0, shader
+subcode: load_program(id, shader)
+    $(block:_setup)
+        $local GLuint prog_$(id)
+        $(if:shader_string)
+            $global s_vsrc$(id)=[file:$(shader).vsl]
+            $global s_fsrc$(id)=[file:$(shader).fsl]
+        $(else)
+            s_vsrc$(id) = get_file_s("$(shader).vsl", NULL)
+            s_fsrc$(id) = get_file_s("$(shader).fsl", NULL)
+        prog_$(id) = load_shaders(s_vsrc$(id), s_fsrc$(id))
+    $(block:_cleanup)
+        glDeleteProgram(prog_$(id))
 
 fncode: load_shaders(s_vsrc, s_fsrc)
     $call load_shader, VERTEX, s_vsrc
@@ -93,18 +191,52 @@ fncode: load_shaders(s_vsrc, s_fsrc)
             glGet$(type)InfoLog($(V), tn_info_len, NULL, ts_info)
             puts(ts_info)
 
-#---------------------------------------- 
-subcode: set_uniform_list
-    $(if:uniform_list)
-        $local GLint loc
-        $(for:v in $(uniform_list))
-            loc = glGetUniformLocation(program_0, "$(v)")
-            $if loc!=-1
-                $call set_uniform_$(v)
+#----------------------------------------------- 
+fncode: load_dds(s_dds)
+    $call get_file_in_s, s_dds
+    $(set:u=*(unsigned int *)&(s[$1]))
+    $(for:w,h,size,mipcnt and 12,16,20,28)
+        tu_$1 = $(u:$2)
+    # tn_size = tu_mipcnt>1? tu_size*2 : tu_size
+    ts_4cc = s+84
+    ts_4cc[4]='\0'
+    $dump(load_dds) tu_w, tu_h, tu_mipcnt, ts_4cc
 
-subcode: set_uniform_n_width
-    glUniform1i(loc, n_width)
+    $if ts_4cc $eq "DXT1"
+        tu_sampls = 3
+    $else
+        tu_sampls = 4
 
-subcode: set_uniform_n_height
-    glUniform1i(loc, n_height)
+    $(for:1,3,5)
+        $case ts_4cc $eq "DXT$1"
+            tu_format = GL_COMPRESSED_RGBA_S3TC_DXT$1_EXT
+    $else
+        return 0
+
+    $local GLuint id
+    glGenTextures(1,&id)
+    glBindTexture(GL_TEXTURE_2D, id)
+
+    tn_blksize = 8
+    $if tu_format != GL_COMPRESSED_RGBA_S3TC_DXT1_EXT
+        tn_blksize = 16
+
+    tpc_buf = (unsigned char*) s+128
+    tn_off = 0
+    $for i=0:tu_mipcnt
+        tn_size = tn_blksize * ((tu_w+3)/4) * ((tu_h+3)/4)
+        glCompressedTexImage2D(GL_TEXTURE_2D, i, tu_format, tu_w, tu_h, 0, tn_size, tpc_buf+tn_off)
+        tn_off += tn_size
+        tu_w/=2
+        tu_h/=2
+        $if tu_w==0 || tu_h==0
+            break
+    free(s)
+    return id
+
+    # ---------------
+    macros:
+        DXT1: 0x31545844
+        DXT3: 0x33545844
+        DXT5: 0x35545844
 

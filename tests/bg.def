@@ -1,0 +1,23 @@
+macros:
+    attrib_list: bg
+    varying_list: uv
+    type_bg: vec3
+    type_uv: vec2
+
+page: bg, vertex_shader
+    module: glsl
+    type: vsl
+
+    uv = bg.xy
+    gl_Position.xyz = bg
+    gl_Position.w = 1.0
+
+page: bg, fragment_shader
+    module: glsl
+    type: fsl
+
+    tf_r = length(uv.norm) / 0.3
+    $if tf_r>1.0
+        tf_r=1.0
+    tf_v = 0.5*(cos(tf_r*3.14)+1)/2+0.5
+    color = vec3(1,1,1) * tf_v

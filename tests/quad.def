@@ -1,0 +1,71 @@
+#---- Typical OpenGL Test -------------
+prerun: mydef_page -mglsl -oout quad.def
+
+include: gl/osx.def
+include: gl/gl_geometry.def
+
+macros:
+    uniform_list: n_width, n_height, f_time, i_idx
+    attrib_list: pos
+    varying_list: v3_fragcolor
+
+page: quad, gl_frame
+    module: c
+    shader: out/quad
+    shader_string: 1
+    window_size: 800, 600
+    fps: 30
+
+    $global i_idx
+    $(if:0)
+        # $call demo_triangle
+        $call demo_square
+    $(else)
+        $(set:draw_type=draw_two)
+        &call static_vertex_array
+            $(set:pos) join, ','
+                $(P0), 0
+                $(P1), 0
+                0, 1, 0
+            $(set:element) join, ','
+                0, 1, 2
+            $(mexport:pos,element)
+
+    subcode: draw_two
+            $(for:0,1)
+                i_idx = $1
+                $call set_uniform, i_idx
+                $call draw_elements
+
+#----------------------------------------------- 
+include: gl/glsl_util.def
+page: quad, vertex_shader
+    module: glsl
+    type: vsl
+    # idx_before: 1
+
+    f_aspect = 1.0 * n_width / n_height
+    v3_p = pos 
+    $(if:idx_before)
+        v3_p += vec3(1,0,0)*i_idx*2.5
+    $call setup_model, v3_p
+    gl_Position.xyz = v3_p
+    gl_Position.w = 1.0
+
+    subcode: setup_model(p)
+        # f_theta = $(degree:60.0)
+        f_theta = f_time/50.0
+        f_phi   = f_time/2.0
+        $call rotate, $(p).yz, f_theta
+        $call rotate, $(p).xz, f_phi
+        $(if:!idx_before)
+            v3_p += vec3(1,0,0)*i_idx*2.5
+        $(p).x/=f_aspect
+        $(p)/=4.0
+
+page: quad, fragment_shader
+    module: glsl
+    type: fsl
+
+    color = vec3(1,1,1)
+

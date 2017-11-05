@@ -2,13 +2,11 @@
 prerun: mydef_page -mglsl -oout cube.def
 
 include: gl/osx.def
-include: gl/gl.def
-include: gl/glsl_util.def
+include: gl/gl_geometry.def
 
 macros:
     uniform_list: n_width, n_height, f_time
-    # attrib_list: pos, color
-    attrib_list: color, pos
+    attrib_list: pos, color
     varying_list: v3_fragcolor
 
 page: cube, gl_frame
@@ -18,10 +16,33 @@ page: cube, gl_frame
     window_size: 800, 600
     fps: 30
 
-    #$call demo_triangle
-    $call demo_cube
+    $(if:0)
+        $call demo_cube
+    $(else)
+        $(set:draw_type=draw_6)
+        &call static_vertex_array
+            $(set:pos) join, ','
+                $(P000), $(P010), $(P100),$(P110)
+                $(P001), $(P011), $(P101),$(P111)
+                $(P000), $(P001), $(P100),$(P101)
+                $(P010), $(P011), $(P110),$(P111)
+                $(P000), $(P001), $(P010),$(P011)
+                $(P100), $(P101), $(P110),$(P111)
+            $(set:color) join, ','
+                $(red:x4,)
+                $(green:x4,)
+                $(blue:x4,)
+                $(cyan:x4,)
+                $(yellow:x4,)
+                $(purple:x4,)
+            $(mexport:pos,color)
+
+    subcode: draw_6
+        $for i=0:6
+            glDrawArrays(GL_TRIANGLE_STRIP,i*4,4)
 
 #----------------------------------------------- 
+include: gl/glsl_util.def
 page: cube, vertex_shader
     module: glsl
     type: vsl
@@ -29,9 +50,10 @@ page: cube, vertex_shader
     f_aspect = 1.0 * n_width / n_height
     v3_p = pos
     $call setup_model, v3_p
-    v3_fragcolor = color
     gl_Position.xyz = v3_p
     gl_Position.w = 1.0
+
+    v3_fragcolor = color
 
     subcode: setup_model(p)
         # f_theta = $(degree:60.0)

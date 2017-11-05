@@ -1,0 +1,11 @@
+#version 330 core
+
+in vec3 bg;
+out vec2 uv;
+
+void main(void){
+    uv = bg.xy;
+    gl_Position.xyz = bg;
+    gl_Position.w = 1.0;
+}
+

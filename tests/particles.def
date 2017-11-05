@@ -1,0 +1,100 @@
+prerun: mydef_page -mglsl -oout particles.def
+
+include: gl/osx.def
+include: gl/gl_particles.def
+
+macros:
+    attrib_list: pos, xyc
+    uniform_list: f_time, n_width, n_height
+    varying_list: fragcolor
+    type_xyc: vec3
+    type_fragcolor: vec3
+    type_color: vec3
+
+page: test, gl_frame
+    module: c
+    shader: out/particle
+    shader_string: 1
+    window_size: 800, 600
+    fps: 30
+    N: 1000
+    N2: 100000
+    LIFE: 200
+
+    $struct(seed) n_life, f_x, f_y
+    $global n_seed, struct seed p_seeds[$(N)]
+    $global n_particle
+    f_dx = 1.0/n_width
+
+    &call particles, $(N2), n_particle
+        $call generate_seeds, 2
+        &call update_seeds
+            # $(p:x) += -y
+            # $(p:y) += x
+            $(p:x) += f_dx
+        $call update_particles
+        # $dump n_seed, n_particle
+
+    subcode: generate_seeds(n)
+        $if n_seed+$(n)<$(N)
+            $for i=0:$(n)
+                p_seeds[n_seed].n_life = 200
+                $(set:rand=(float)rand()/(float)RAND_MAX)
+                p_seeds[n_seed].f_x = $(rand)*2-1
+                p_seeds[n_seed].f_y = $(rand)*2-1
+                n_seed++
+
+
+    subcode: update_seeds
+        # $for i=0:n_seed
+        i = 0
+        $while i<n_seed; i++
+            $if p_seeds[i].n_life>0
+                p_seeds[i].n_life--
+                $if n_particle<$(N2)
+                    $(set:p=p_seeds[i].f_$1)
+                    $my float x, float y
+                    x = $(p:x)
+                    y = $(p:y)
+                    BLOCK
+                    k = n_particle * 3
+                    xyc_data[k]  = p_seeds[i].f_x
+                    xyc_data[k+1]= p_seeds[i].f_y
+                    xyc_data[k+2]=0.9
+                    n_particle++
+            $else
+                n_seed--
+                memcpy(&p_seeds[i], &p_seeds[n_seed], sizeof(struct seed))
+
+    subcode: update_particles
+        i=0
+        $while i<n_particle; i++
+            k=i*3+2
+            xyc_data[k] -= 1.0/$(LIFE)
+            $if xyc_data[k]<0.3
+                n_particle--
+                memcpy(xyc_data+i*3, xyc_data+n_particle*3, 3*sizeof(xyc_data[0]))
+
+#----------------------------------------------- 
+page: particle, vertex_shader
+    module: glsl
+    type: vsl
+
+    $(set:f=1.0)
+    v2_o= pos.xy * vec2($(f)/n_width, $(f)/n_height)
+
+    gl_Position.xy = v2_o.xy + xyc.xy
+    gl_Position.z = 0
+    gl_Position.w = 1.0
+    $(if:1)
+        # fragcolor = vec4(1,1,1,xyc.z)
+        fragcolor = vec3(1,1,1)*xyc.z
+    $(else)
+        fragcolor = vec3(1,1,1)
+
+page: particle, fragment_shader
+    module: glsl
+    type: fsl
+
+    color = fragcolor
+

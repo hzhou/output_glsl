@@ -27,6 +27,3 @@ subcode: check_fps
         f_start_time=f_time
         n_frame_count=0
 
-#----------------------------------------------- 
-subcode: set_uniform_f_time
-    glUniform1f(loc, f_time)
